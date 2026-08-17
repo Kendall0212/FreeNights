@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CalendarDays, Sparkles, Loader2 } from "lucide-react";
 import { useGroup } from "./hooks/useGroup";
-import { setStatus as writeStatus } from "./lib/data";
+import { setStatus as writeStatus, setDaySlots as writeDaySlots } from "./lib/data";
+import { fromKey, toKey } from "./lib/dates";
 import { getMemberId, setMemberId } from "./lib/storage";
 import Landing from "./components/Landing";
 import JoinName from "./components/JoinName";
@@ -15,6 +16,18 @@ type Tab = "calendar" | "best";
 
 function readCode(): string | null {
   return new URLSearchParams(window.location.search).get("g");
+}
+
+function expandRange(startKey: string, endKey: string): string[] {
+  const [a, b] = startKey <= endKey ? [startKey, endKey] : [endKey, startKey];
+  const dates: string[] = [];
+  const cur = fromKey(a);
+  const end = fromKey(b);
+  while (cur <= end) {
+    dates.push(toKey(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
 }
 
 export default function App() {
@@ -57,6 +70,26 @@ export default function App() {
       await reload();
     } catch {
       // realtime will still reconcile; a failed write just won't persist
+    }
+  }
+
+  async function handleSetAllDay(status: Status | null) {
+    if (!group || !me || !openDate) return;
+    try {
+      await writeDaySlots(group.id, me.id, [openDate], status);
+      await reload();
+    } catch {
+      // no-op; realtime reconciles
+    }
+  }
+
+  async function handleSetRange(startKey: string, endKey: string, status: Status | null) {
+    if (!group || !me) return;
+    try {
+      await writeDaySlots(group.id, me.id, expandRange(startKey, endKey), status);
+      await reload();
+    } catch {
+      // no-op; realtime reconciles
     }
   }
 
@@ -110,6 +143,7 @@ export default function App() {
           members={members}
           availability={availability}
           onPickDate={setOpenDate}
+          onSetRange={handleSetRange}
         />
       ) : (
         <Overlap members={members} availability={availability} />
@@ -121,7 +155,7 @@ export default function App() {
             active={tab === "calendar"}
             onClick={() => setTab("calendar")}
             icon={<CalendarDays size={20} />}
-            label="My free times"
+            label="Calendar"
           />
           <TabButton
             active={tab === "best"}
@@ -139,6 +173,7 @@ export default function App() {
           members={members}
           availability={availability}
           onSet={handleSet}
+          onSetAllDay={handleSetAllDay}
           onClose={() => setOpenDate(null)}
         />
       )}
