@@ -1,38 +1,107 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarRange, X } from "lucide-react";
 import {
   addMonths,
   isPast,
   monthGrid,
   monthTitle,
+  prettyDate,
   sameMonth,
   toKey,
 } from "../lib/dates";
-import { dayFreeCount } from "../lib/overlap";
-import type { Availability, Member } from "../lib/types";
+import type { Availability, Member, Status } from "../lib/types";
 
 interface Props {
   me: Member;
   members: Member[];
   availability: Availability[];
   onPickDate: (key: string) => void;
+  onSetRange: (startKey: string, endKey: string, status: Status | null) => void;
 }
 
 const DOW = ["M", "T", "W", "T", "F", "S", "S"];
+const MAX_DOTS = 3;
 
-export default function Calendar({ me, members, availability, onPickDate }: Props) {
+function countDaysInclusive(a: string, b: string): number {
+  const start = new Date(a);
+  const end = new Date(b);
+  return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
+export default function Calendar({
+  me,
+  members,
+  availability,
+  onPickDate,
+  onSetRange,
+}: Props) {
   const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const [anchor, setAnchor] = useState<Date>(thisMonth);
+  const [rangeMode, setRangeMode] = useState(false);
+  const [rangeStart, setRangeStart] = useState<string | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<string | null>(null);
 
   const weeks = useMemo(() => monthGrid(anchor), [anchor]);
-  const total = Math.max(members.length, 1);
   const atStart = sameMonth(anchor, thisMonth);
 
-  const myDays = useMemo(() => {
-    const set = new Set<string>();
-    for (const a of availability) if (a.member_id === me.id) set.add(a.date);
-    return set;
+  const memberById = useMemo(() => {
+    const m = new Map<string, Member>();
+    for (const x of members) m.set(x.id, x);
+    return m;
+  }, [members]);
+
+  const freeByDate = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const a of availability) {
+      if (a.status !== "free") continue;
+      let set = m.get(a.date);
+      if (!set) {
+        set = new Set<string>();
+        m.set(a.date, set);
+      }
+      set.add(a.member_id);
+    }
+    return m;
+  }, [availability]);
+
+  const mineDates = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of availability) if (a.member_id === me.id) s.add(a.date);
+    return s;
   }, [availability, me.id]);
+
+  const lo = rangeStart && rangeEnd ? (rangeStart <= rangeEnd ? rangeStart : rangeEnd) : rangeStart;
+  const hi = rangeStart && rangeEnd ? (rangeStart <= rangeEnd ? rangeEnd : rangeStart) : rangeStart;
+
+  function inRange(key: string): boolean {
+    if (!lo) return false;
+    if (!rangeEnd) return key === lo;
+    return key >= lo && key <= (hi as string);
+  }
+
+  function handleDay(key: string) {
+    if (!rangeMode) {
+      onPickDate(key);
+      return;
+    }
+    if (!rangeStart || (rangeStart && rangeEnd)) {
+      setRangeStart(key);
+      setRangeEnd(null);
+    } else {
+      setRangeEnd(key);
+    }
+  }
+
+  function exitRange() {
+    setRangeMode(false);
+    setRangeStart(null);
+    setRangeEnd(null);
+  }
+
+  function applyRange(status: Status | null) {
+    if (lo && hi) onSetRange(lo, hi as string, status);
+    exitRange();
+  }
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-5">
@@ -59,6 +128,57 @@ export default function Calendar({ me, members, availability, onPickDate }: Prop
         </div>
       </div>
 
+      {!rangeMode ? (
+        <button
+          onClick={() => setRangeMode(true)}
+          className="mb-3 inline-flex items-center gap-2 rounded-full border border-mist bg-white px-3.5 py-2 text-sm font-semibold text-ink shadow-card active:scale-95"
+        >
+          <CalendarRange size={16} />
+          Mark a range
+        </button>
+      ) : (
+        <div className="mb-3 rounded-2xl bg-white p-3 shadow-card">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-ink">
+              {!rangeStart
+                ? "Tap the first day"
+                : !rangeEnd
+                ? "Now tap the last day"
+                : `${prettyDate(lo as string)} \u2192 ${prettyDate(hi as string)} \u00b7 ${countDaysInclusive(lo as string, hi as string)} days`}
+            </p>
+            <button
+              onClick={exitRange}
+              aria-label="Cancel range"
+              className="rounded-full p-1 text-muted active:scale-95"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          {rangeStart && rangeEnd && (
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <button
+                onClick={() => applyRange("free")}
+                className="rounded-xl bg-mulberry py-2.5 text-sm font-semibold text-white active:scale-95"
+              >
+                Free
+              </button>
+              <button
+                onClick={() => applyRange("busy")}
+                className="rounded-xl bg-ink py-2.5 text-sm font-semibold text-white active:scale-95"
+              >
+                Busy
+              </button>
+              <button
+                onClick={() => applyRange(null)}
+                className="rounded-xl border border-mist py-2.5 text-sm font-semibold text-muted active:scale-95"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-7 mb-2">
         {DOW.map((d, i) => (
           <div key={i} className="text-center font-mono text-[11px] text-muted">
@@ -71,44 +191,53 @@ export default function Calendar({ me, members, availability, onPickDate }: Prop
         {weeks.flat().map((day, idx) => {
           const key = toKey(day);
           const inMonth = sameMonth(day, anchor);
-          const past = isPast(day);
-          const disabled = past || !inMonth;
-          const free = dayFreeCount(availability, key);
-          const intensity = Math.min(free / total, 1);
-          const mine = myDays.has(key);
+          const disabled = isPast(day) || !inMonth;
+
+          const freeIds = freeByDate.get(key);
+          const freeMembers = freeIds
+            ? Array.from(freeIds)
+                .map((id) => memberById.get(id))
+                .filter((m): m is Member => !!m)
+            : [];
+          const overflow = freeMembers.length - MAX_DOTS;
+          const selected = rangeMode && inRange(key);
+          const mine = mineDates.has(key);
 
           return (
             <button
               key={idx}
               disabled={disabled}
-              onClick={() => onPickDate(key)}
-              className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition active:scale-95 ${
+              onClick={() => handleDay(key)}
+              className={`relative aspect-square rounded-xl flex flex-col items-center justify-start pt-1.5 gap-1 transition active:scale-95 ${
                 disabled
                   ? "text-mist"
+                  : selected
+                  ? "bg-mulberry text-white"
                   : "text-ink bg-white shadow-card hover:ring-2 hover:ring-mulberry/20"
-              }`}
-              style={
-                !disabled && intensity > 0
-                  ? {
-                      backgroundColor: `rgba(178,68,104,${0.12 + intensity * 0.6})`,
-                      color: intensity > 0.5 ? "#fff" : undefined,
-                    }
-                  : undefined
-              }
+              } ${mine && !selected && !disabled ? "ring-1 ring-mulberry/40" : ""}`}
             >
-              <span className={`text-sm ${inMonth ? "" : "opacity-40"}`}>
+              <span className={`text-sm leading-none ${inMonth ? "" : "opacity-40"}`}>
                 {day.getDate()}
               </span>
-              {!disabled && free > 0 && (
-                <span className="font-mono text-[10px] leading-none mt-0.5">
-                  {free}
-                </span>
-              )}
-              {mine && (
-                <span
-                  className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full"
-                  style={{ background: me.colour }}
-                />
+              {!disabled && freeMembers.length > 0 && (
+                <div className="flex items-center justify-center gap-0.5 flex-wrap px-0.5">
+                  {freeMembers.slice(0, MAX_DOTS).map((m) => (
+                    <span
+                      key={m.id}
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ background: selected ? "#fff" : m.colour }}
+                    />
+                  ))}
+                  {overflow > 0 && (
+                    <span
+                      className={`font-mono text-[9px] leading-none ${
+                        selected ? "text-white" : "text-muted"
+                      }`}
+                    >
+                      +{overflow}
+                    </span>
+                  )}
+                </div>
               )}
             </button>
           );
@@ -116,8 +245,9 @@ export default function Calendar({ me, members, availability, onPickDate }: Prop
       </div>
 
       <p className="text-muted text-sm mt-4 text-center">
-        Tap a day to set your morning, afternoon and evening. Brighter days = more
-        friends free.
+        {rangeMode
+          ? "Pick a start and end day, then mark the whole stretch free or busy."
+          : "Dots show who's free. Tap a day to set your times and see everyone's."}
       </p>
     </div>
   );
