@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, Sparkles, Loader2 } from "lucide-react";
+import { CalendarDays, Sparkles, PartyPopper, Loader2 } from "lucide-react";
 import { useGroup } from "./hooks/useGroup";
+import { usePlans } from "./hooks/usePlans";
 import {
   setStatus as writeStatus,
   setDaySlots as writeDaySlots,
@@ -13,9 +14,10 @@ import Header from "./components/Header";
 import Calendar from "./components/Calendar";
 import Overlap from "./components/Overlap";
 import DateSheet from "./components/DateSheet";
+import Plans from "./components/Plans";
 import type { Slot, Status } from "./lib/types";
 
-type Tab = "calendar" | "best";
+type Tab = "calendar" | "best" | "plans";
 
 // One shared group for the friend circle — loaded from the bare link.
 const DEFAULT_CODE = "friends";
@@ -57,6 +59,7 @@ export default function App() {
 
   const { group, members, availability, loading, notFound, error, reload } =
     useGroup(shareCode);
+  const { plans, rsvps, reloadPlans } = usePlans(group?.id ?? null);
 
   useEffect(() => {
     setMeId(getMemberId(shareCode));
@@ -150,7 +153,7 @@ export default function App() {
     <div className="min-h-dvh pb-24">
       <Header me={me} />
 
-      {tab === "calendar" ? (
+      {tab === "calendar" && (
         <Calendar
           me={me}
           members={members}
@@ -159,12 +162,21 @@ export default function App() {
           onSetRange={handleSetRange}
           onFreeWeekends={handleFreeWeekends}
         />
-      ) : (
-        <Overlap members={members} availability={availability} />
+      )}
+      {tab === "best" && <Overlap members={members} availability={availability} />}
+      {tab === "plans" && (
+        <Plans
+          group={group}
+          me={me}
+          members={members}
+          plans={plans}
+          rsvps={rsvps}
+          onChanged={reloadPlans}
+        />
       )}
 
       <nav className="fixed bottom-0 inset-x-0 z-20 border-t border-mist bg-paper/90 backdrop-blur-md">
-        <div className="mx-auto max-w-md grid grid-cols-2">
+        <div className="mx-auto max-w-md grid grid-cols-3">
           <TabButton
             active={tab === "calendar"}
             onClick={() => setTab("calendar")}
@@ -176,6 +188,12 @@ export default function App() {
             onClick={() => setTab("best")}
             icon={<Sparkles size={20} />}
             label="Best times"
+          />
+          <TabButton
+            active={tab === "plans"}
+            onClick={() => setTab("plans")}
+            icon={<PartyPopper size={20} />}
+            label="Plans"
           />
         </div>
       </nav>
