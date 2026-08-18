@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarRange, X, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarRange, X, Sparkles, Repeat } from "lucide-react";
 import {
   addMonths,
   isPast,
@@ -18,6 +18,7 @@ interface Props {
   onPickDate: (key: string) => void;
   onSetRange: (startKey: string, endKey: string, status: Status | null) => void;
   onFreeWeekends: () => void;
+  onOpenUsual: () => void;
 }
 
 const DOW = ["M", "T", "W", "T", "F", "S", "S"];
@@ -36,6 +37,7 @@ export default function Calendar({
   onPickDate,
   onSetRange,
   onFreeWeekends,
+  onOpenUsual,
 }: Props) {
   const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const [anchor, setAnchor] = useState<Date>(thisMonth);
@@ -145,6 +147,13 @@ export default function Calendar({
           >
             <CalendarRange size={16} />
             Mark a range
+          </button>
+          <button
+            onClick={onOpenUsual}
+            className="inline-flex items-center gap-2 rounded-full border border-mist bg-white px-3.5 py-2 text-sm font-semibold text-ink shadow-card active:scale-95"
+          >
+            <Repeat size={16} />
+            My usual
           </button>
         </div>
       ) : (

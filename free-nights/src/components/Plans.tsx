@@ -8,6 +8,7 @@ import {
   X,
   PartyPopper,
   Send,
+  Plus,
 } from "lucide-react";
 import Avatar from "./Avatar";
 import { prettyDate, todayKey, fromKey } from "../lib/dates";
@@ -21,9 +22,11 @@ import {
   toggleReaction,
   addComment,
   deleteComment,
+  addVenue,
+  voteVenue,
 } from "../lib/plans";
 import type { Slot, Group, Member } from "../lib/types";
-import type { Plan, Rsvp, Reaction, Comment } from "../lib/plans";
+import type { Plan, Rsvp, Reaction, Comment, Venue, VenueVote } from "../lib/plans";
 
 interface Props {
   group: Group;
@@ -33,6 +36,8 @@ interface Props {
   rsvps: Rsvp[];
   reactions: Reaction[];
   comments: Comment[];
+  venues: Venue[];
+  venueVotes: VenueVote[];
   onChanged: () => void;
 }
 
@@ -66,6 +71,8 @@ export default function Plans({
   rsvps,
   reactions,
   comments,
+  venues,
+  venueVotes,
   onChanged,
 }: Props) {
   const [proposing, setProposing] = useState(false);
@@ -177,6 +184,8 @@ export default function Plans({
               rsvps={rsvps}
               reactions={reactions}
               comments={comments}
+              venues={venues}
+              venueVotes={venueVotes}
               onChanged={onChanged}
             />
           ))}
@@ -193,11 +202,19 @@ interface CardProps {
   rsvps: Rsvp[];
   reactions: Reaction[];
   comments: Comment[];
+  venues: Venue[];
+  venueVotes: VenueVote[];
   onChanged: () => void;
 }
 
-function PlanCard({ plan, me, memberById, rsvps, reactions, comments, onChanged }: CardProps) {
+function PlanCard({ plan, me, memberById, rsvps, reactions, comments, venues, venueVotes, onChanged }: CardProps) {
   const [draft, setDraft] = useState("");
+  const [venueName, setVenueName] = useState("");
+
+  const planVenues = venues.filter((v) => v.plan_id === plan.id);
+  const planVenueIds = planVenues.map((v) => v.id);
+  const myVoteVenueId =
+    venueVotes.find((vv) => planVenueIds.includes(vv.venue_id) && vv.member_id === me.id)?.venue_id ?? null;
 
   const inMembers = rsvps
     .filter((r) => r.plan_id === plan.id && r.status === "in")
@@ -231,6 +248,13 @@ function PlanCard({ plan, me, memberById, rsvps, reactions, comments, onChanged 
     if (!body) return;
     setDraft("");
     await act(() => addComment(plan.id, me.id, body));
+  }
+
+  async function addSpot() {
+    const n = venueName.trim();
+    if (!n) return;
+    setVenueName("");
+    await act(() => addVenue(plan.id, n));
   }
 
   return (
@@ -313,6 +337,48 @@ function PlanCard({ plan, me, memberById, rsvps, reactions, comments, onChanged 
             </button>
           );
         })}
+      </div>
+
+      <div className="mt-3">
+        <p className="font-mono text-[11px] uppercase tracking-wide text-muted mb-1.5">Where?</p>
+        {planVenues.length > 0 && (
+          <div className="space-y-1.5">
+            {planVenues.map((v) => {
+              const count = venueVotes.filter((vv) => vv.venue_id === v.id).length;
+              const mineV = myVoteVenueId === v.id;
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => act(() => voteVenue(planVenueIds, v.id, me.id, !mineV))}
+                  className={`w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm transition active:scale-[0.99] ${
+                    mineV ? "bg-mulberry text-white" : "bg-paper text-ink border border-mist"
+                  }`}
+                >
+                  <span className="truncate">{v.name}</span>
+                  <span className="font-mono text-xs ml-2 shrink-0">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex items-center gap-2 mt-1.5">
+          <input
+            value={venueName}
+            onChange={(e) => setVenueName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addSpot()}
+            placeholder="Add a spot…"
+            maxLength={60}
+            className="flex-1 rounded-xl border border-mist bg-paper px-3 py-2 text-sm outline-none focus:border-mulberry"
+          />
+          <button
+            onClick={addSpot}
+            disabled={!venueName.trim()}
+            aria-label="Add spot"
+            className="rounded-xl bg-ink p-2.5 text-white active:scale-95 disabled:opacity-40"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 mt-3">
