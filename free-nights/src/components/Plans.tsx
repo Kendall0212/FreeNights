@@ -1,12 +1,29 @@
 import { useMemo, useState } from "react";
-import { CalendarPlus, Download, Trash2, Check, X, CalendarDays } from "lucide-react";
+import {
+  CalendarPlus,
+  CalendarDays,
+  Download,
+  Trash2,
+  Check,
+  X,
+  PartyPopper,
+  Send,
+} from "lucide-react";
 import Avatar from "./Avatar";
-import { prettyDate, todayKey } from "../lib/dates";
+import { prettyDate, todayKey, fromKey } from "../lib/dates";
 import { SLOT_LABEL } from "../lib/types";
 import { buildIcs, downloadIcs, googleCalUrl } from "../lib/ics";
-import { createPlan, deletePlan, setRsvp } from "../lib/plans";
+import {
+  createPlan,
+  deletePlan,
+  setRsvp,
+  setConfirmed,
+  toggleReaction,
+  addComment,
+  deleteComment,
+} from "../lib/plans";
 import type { Slot, Group, Member } from "../lib/types";
-import type { Plan, Rsvp } from "../lib/plans";
+import type { Plan, Rsvp, Reaction, Comment } from "../lib/plans";
 
 interface Props {
   group: Group;
@@ -14,6 +31,8 @@ interface Props {
   members: Member[];
   plans: Plan[];
   rsvps: Rsvp[];
+  reactions: Reaction[];
+  comments: Comment[];
   onChanged: () => void;
 }
 
@@ -24,7 +43,31 @@ const SLOT_OPTIONS: { value: "" | Slot; label: string }[] = [
   { value: "evening", label: "Evening" },
 ];
 
-export default function Plans({ group, me, members, plans, rsvps, onChanged }: Props) {
+const REACTION_EMOJIS = ["🎉", "❤️", "🔥", "👀", "🙌"];
+
+function countdown(dateKey: string): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = fromKey(dateKey);
+  d.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return "today";
+  if (diff === 1) return "tomorrow";
+  if (diff > 1) return `in ${diff} days`;
+  if (diff === -1) return "yesterday";
+  return `${-diff} days ago`;
+}
+
+export default function Plans({
+  group,
+  me,
+  members,
+  plans,
+  rsvps,
+  reactions,
+  comments,
+  onChanged,
+}: Props) {
   const [proposing, setProposing] = useState(false);
   const [pdate, setPdate] = useState(todayKey());
   const [pslot, setPslot] = useState<"" | Slot>("evening");
@@ -47,38 +90,10 @@ export default function Plans({ group, me, members, plans, rsvps, onChanged }: P
       setPnote("");
       onChanged();
     } catch {
-      // no-op; realtime reconciles
+      // realtime reconciles
     } finally {
       setBusy(false);
     }
-  }
-
-  async function rsvp(planId: string, status: "in" | "out") {
-    try {
-      await setRsvp(planId, me.id, status);
-      onChanged();
-    } catch {
-      // no-op
-    }
-  }
-
-  async function remove(planId: string) {
-    try {
-      await deletePlan(planId);
-      onChanged();
-    } catch {
-      // no-op
-    }
-  }
-
-  function planTitle(plan: Plan) {
-    return plan.note ? `Girls' night — ${plan.note}` : "Girls' night";
-  }
-  function toGoogle(plan: Plan) {
-    window.open(googleCalUrl(planTitle(plan), plan.date, plan.slot, plan.note), "_blank", "noopener");
-  }
-  function toApple(plan: Plan) {
-    downloadIcs("free-nights.ics", buildIcs(planTitle(plan), plan.date, plan.slot, plan.note));
   }
 
   return (
@@ -153,82 +168,214 @@ export default function Plans({ group, me, members, plans, rsvps, onChanged }: P
         </div>
       ) : (
         <div className="space-y-3">
-          {plans.map((plan) => {
-            const planRsvps = rsvps.filter((r) => r.plan_id === plan.id);
-            const inMembers = planRsvps
-              .filter((r) => r.status === "in")
-              .map((r) => memberById.get(r.member_id))
-              .filter((m): m is Member => !!m);
-            const mine = planRsvps.find((r) => r.member_id === me.id)?.status ?? null;
+          {plans.map((plan) => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              me={me}
+              memberById={memberById}
+              rsvps={rsvps}
+              reactions={reactions}
+              comments={comments}
+              onChanged={onChanged}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
+interface CardProps {
+  plan: Plan;
+  me: Member;
+  memberById: Map<string, Member>;
+  rsvps: Rsvp[];
+  reactions: Reaction[];
+  comments: Comment[];
+  onChanged: () => void;
+}
+
+function PlanCard({ plan, me, memberById, rsvps, reactions, comments, onChanged }: CardProps) {
+  const [draft, setDraft] = useState("");
+
+  const inMembers = rsvps
+    .filter((r) => r.plan_id === plan.id && r.status === "in")
+    .map((r) => memberById.get(r.member_id))
+    .filter((m): m is Member => !!m);
+  const mine = rsvps.find((r) => r.plan_id === plan.id && r.member_id === me.id)?.status ?? null;
+
+  const planReactions = reactions.filter((r) => r.plan_id === plan.id);
+  const planComments = comments.filter((c) => c.plan_id === plan.id);
+
+  async function act(fn: () => Promise<void>) {
+    try {
+      await fn();
+      onChanged();
+    } catch {
+      // realtime reconciles
+    }
+  }
+
+  function toGoogle() {
+    const title = plan.note ? `Girls' night — ${plan.note}` : "Girls' night";
+    window.open(googleCalUrl(title, plan.date, plan.slot, plan.note), "_blank", "noopener");
+  }
+  function toApple() {
+    const title = plan.note ? `Girls' night — ${plan.note}` : "Girls' night";
+    downloadIcs("free-nights.ics", buildIcs(title, plan.date, plan.slot, plan.note));
+  }
+
+  async function postComment() {
+    const body = draft.trim();
+    if (!body) return;
+    setDraft("");
+    await act(() => addComment(plan.id, me.id, body));
+  }
+
+  return (
+    <div className={`rounded-2xl bg-white p-4 shadow-card ${plan.confirmed ? "ring-2 ring-mulberry" : ""}`}>
+      {plan.confirmed && (
+        <div className="flex items-center gap-1.5 text-mulberry font-semibold text-sm mb-2">
+          <PartyPopper size={16} />
+          It's on! · {countdown(plan.date)}
+        </div>
+      )}
+
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-display font-extrabold text-lg text-ink">{prettyDate(plan.date)}</p>
+          <p className="font-mono text-[11px] uppercase tracking-wide text-muted">
+            {plan.slot ? SLOT_LABEL[plan.slot] : "Any time"}
+          </p>
+          {plan.note && <p className="text-ink mt-1.5">{plan.note}</p>}
+        </div>
+        <button
+          onClick={() => act(() => deletePlan(plan.id))}
+          aria-label="Remove plan"
+          className="rounded-full p-1.5 text-muted hover:text-mulberry-deep active:scale-95"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 mt-3 min-h-[24px]">
+        {inMembers.map((m) => (
+          <Avatar key={m.id} name={m.name} colour={m.colour} emoji={m.emoji} size={24} />
+        ))}
+        <span className="font-mono text-[11px] text-muted ml-0.5">{inMembers.length} in</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <button
+          onClick={() => act(() => setRsvp(plan.id, me.id, "in"))}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition active:scale-95 ${
+            mine === "in" ? "bg-mulberry text-white" : "bg-paper text-ink border border-mist"
+          }`}
+        >
+          <Check size={15} /> I'm in
+        </button>
+        <button
+          onClick={() => act(() => setRsvp(plan.id, me.id, "out"))}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition active:scale-95 ${
+            mine === "out" ? "bg-ink text-white" : "bg-paper text-ink border border-mist"
+          }`}
+        >
+          <X size={15} /> Can't make it
+        </button>
+      </div>
+
+      <button
+        onClick={() => act(() => setConfirmed(plan.id, !plan.confirmed))}
+        className={`w-full rounded-xl py-2.5 text-sm font-semibold mt-2 active:scale-95 transition ${
+          plan.confirmed
+            ? "bg-paper text-muted border border-mist"
+            : "bg-ink text-white"
+        }`}
+      >
+        {plan.confirmed ? "Unlock" : "Lock it in 🎉"}
+      </button>
+
+      <div className="flex flex-wrap gap-1.5 mt-3">
+        {REACTION_EMOJIS.map((e) => {
+          const count = planReactions.filter((r) => r.emoji === e).length;
+          const reacted = planReactions.some((r) => r.emoji === e && r.member_id === me.id);
+          return (
+            <button
+              key={e}
+              onClick={() => act(() => toggleReaction(plan.id, me.id, e, !reacted))}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm transition active:scale-90 ${
+                reacted ? "bg-mulberry/15 ring-1 ring-mulberry" : "bg-paper border border-mist"
+              }`}
+            >
+              <span>{e}</span>
+              {count > 0 && <span className="font-mono text-[11px] text-muted">{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <button
+          onClick={toGoogle}
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-mist py-2.5 text-sm font-semibold text-mulberry active:scale-95"
+        >
+          <CalendarDays size={15} /> Google
+        </button>
+        <button
+          onClick={toApple}
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-mist py-2.5 text-sm font-semibold text-mulberry active:scale-95"
+        >
+          <Download size={15} /> Apple / .ics
+        </button>
+      </div>
+
+      {planComments.length > 0 && (
+        <div className="mt-3 space-y-2 border-t border-mist pt-3">
+          {planComments.map((c) => {
+            const author = memberById.get(c.member_id);
             return (
-              <div key={plan.id} className="rounded-2xl bg-white p-4 shadow-card">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-display font-extrabold text-lg text-ink">
-                      {prettyDate(plan.date)}
-                    </p>
-                    <p className="font-mono text-[11px] uppercase tracking-wide text-muted">
-                      {plan.slot ? SLOT_LABEL[plan.slot] : "Any time"}
-                    </p>
-                    {plan.note && <p className="text-ink mt-1.5">{plan.note}</p>}
-                  </div>
-                  <button
-                    onClick={() => remove(plan.id)}
-                    aria-label="Remove plan"
-                    className="rounded-full p-1.5 text-muted hover:text-mulberry-deep active:scale-95"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+              <div key={c.id} className="flex items-start gap-2">
+                {author && (
+                  <Avatar name={author.name} colour={author.colour} emoji={author.emoji} size={22} />
+                )}
+                <div className="min-w-0 flex-1">
+                  <span className="font-semibold text-ink text-sm">{author?.name ?? "Someone"}</span>{" "}
+                  <span className="text-ink text-sm">{c.body}</span>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 mt-3 min-h-[24px]">
-                  {inMembers.map((m) => (
-                    <Avatar key={m.id} name={m.name} colour={m.colour} emoji={m.emoji} size={24} />
-                  ))}
-                  <span className="font-mono text-[11px] text-muted ml-0.5">
-                    {inMembers.length} in
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mt-3">
+                {c.member_id === me.id && (
                   <button
-                    onClick={() => rsvp(plan.id, "in")}
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition active:scale-95 ${
-                      mine === "in" ? "bg-mulberry text-white" : "bg-paper text-ink border border-mist"
-                    }`}
+                    onClick={() => act(() => deleteComment(c.id))}
+                    aria-label="Delete comment"
+                    className="text-muted active:scale-95"
                   >
-                    <Check size={15} /> I'm in
+                    <X size={14} />
                   </button>
-                  <button
-                    onClick={() => rsvp(plan.id, "out")}
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition active:scale-95 ${
-                      mine === "out" ? "bg-ink text-white" : "bg-paper text-ink border border-mist"
-                    }`}
-                  >
-                    <X size={15} /> Can't make it
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button
-                    onClick={() => toGoogle(plan)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-mist py-2.5 text-sm font-semibold text-mulberry active:scale-95"
-                  >
-                    <CalendarDays size={15} /> Google
-                  </button>
-                  <button
-                    onClick={() => toApple(plan)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-mist py-2.5 text-sm font-semibold text-mulberry active:scale-95"
-                  >
-                    <Download size={15} /> Apple / .ics
-                  </button>
-                </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
+
+      <div className="flex items-center gap-2 mt-3">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && postComment()}
+          placeholder="Add a comment…"
+          maxLength={140}
+          className="flex-1 rounded-xl border border-mist bg-paper px-3 py-2 text-sm outline-none focus:border-mulberry"
+        />
+        <button
+          onClick={postComment}
+          disabled={!draft.trim()}
+          aria-label="Send comment"
+          className="rounded-xl bg-mulberry p-2.5 text-white active:scale-95 disabled:opacity-40"
+        >
+          <Send size={16} />
+        </button>
+      </div>
     </div>
   );
 }
