@@ -13,6 +13,7 @@ export interface Member {
   group_id: string;
   name: string;
   colour: string;
+  emoji: string | null;
   created_at: string;
 }
 
@@ -52,3 +53,9 @@ export const STATUS_LABEL: Record<Status, string> = {
   maybe: "Maybe",
   busy: "Busy",
 };
+
+// Fun identity emojis friends pick when they join.
+export const EMOJI_CHOICES = [
+  "🌙", "✨", "🍸", "💃", "🎉", "🌸", "🦋", "🍕",
+  "🎀", "🔥", "🌈", "⭐", "🥂", "🌻", "🍾", "🐝",
+];

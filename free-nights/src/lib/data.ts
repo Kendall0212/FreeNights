@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { nextColour } from "./colours";
+import { nextColour, nextEmoji } from "./colours";
 import { makeShareCode } from "./dates";
 import { SLOTS } from "./types";
 import type { Availability, Group, Member, Slot, Status } from "./types";
@@ -47,12 +47,14 @@ export async function fetchAvailability(groupId: string): Promise<Availability[]
 export async function addMember(
   groupId: string,
   name: string,
-  existing: Member[]
+  existing: Member[],
+  emoji: string
 ): Promise<Member> {
   const colour = nextColour(existing.map((m) => m.colour));
+  const chosen = emoji || nextEmoji(existing.map((m) => m.emoji));
   const { data, error } = await supabase
     .from("members")
-    .insert({ group_id: groupId, name: name.trim(), colour })
+    .insert({ group_id: groupId, name: name.trim(), colour, emoji: chosen })
     .select()
     .single();
   if (error) throw error;
@@ -94,7 +96,6 @@ export async function setStatus(
 }
 
 // Set or clear all three slots across one or many dates at once.
-// Powers "free/busy all day" (one date) and marking a range (many dates).
 export async function setDaySlots(
   groupId: string,
   memberId: string,
@@ -122,6 +123,28 @@ export async function setDaySlots(
       status,
     }))
   );
+  const { error } = await supabase
+    .from("availability")
+    .upsert(rows, { onConflict: "member_id,date,slot" });
+  if (error) throw error;
+}
+
+// Set one specific slot free/busy across many dates (used for "free weekends").
+export async function setSlotDates(
+  groupId: string,
+  memberId: string,
+  dates: string[],
+  slot: Slot,
+  status: Status
+): Promise<void> {
+  if (dates.length === 0) return;
+  const rows = dates.map((date) => ({
+    group_id: groupId,
+    member_id: memberId,
+    date,
+    slot,
+    status,
+  }));
   const { error } = await supabase
     .from("availability")
     .upsert(rows, { onConflict: "member_id,date,slot" });

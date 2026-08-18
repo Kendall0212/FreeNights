@@ -1,3 +1,5 @@
+import { EMOJI_CHOICES } from "./types";
+
 // Curated so any two members stay easy to tell apart.
 export const MEMBER_COLOURS = [
   "#B24468", // mulberry
@@ -16,6 +18,12 @@ export function nextColour(taken: string[]): string {
   const free = MEMBER_COLOURS.find((c) => !taken.includes(c));
   if (free) return free;
   return MEMBER_COLOURS[taken.length % MEMBER_COLOURS.length];
+}
+
+export function nextEmoji(taken: (string | null)[]): string {
+  const used = new Set(taken.filter((e): e is string => !!e));
+  const free = EMOJI_CHOICES.find((e) => !used.has(e));
+  return free ?? EMOJI_CHOICES[used.size % EMOJI_CHOICES.length];
 }
 
 export function initials(name: string): string {
