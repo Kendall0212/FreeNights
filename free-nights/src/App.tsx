@@ -15,6 +15,7 @@ import Calendar from "./components/Calendar";
 import Overlap from "./components/Overlap";
 import DateSheet from "./components/DateSheet";
 import Plans from "./components/Plans";
+import UsualSheet from "./components/UsualSheet";
 import type { Slot, Status } from "./lib/types";
 
 type Tab = "calendar" | "best" | "plans";
@@ -56,10 +57,12 @@ export default function App() {
   const [meId, setMeId] = useState<string | null>(getMemberId(shareCode));
   const [tab, setTab] = useState<Tab>("calendar");
   const [openDate, setOpenDate] = useState<string | null>(null);
+  const [openUsual, setOpenUsual] = useState(false);
 
   const { group, members, availability, loading, notFound, error, reload } =
     useGroup(shareCode);
-  const { plans, rsvps, reactions, comments, reloadPlans } = usePlans(group?.id ?? null);
+  const { plans, rsvps, reactions, comments, venues, venueVotes, reloadPlans } =
+    usePlans(group?.id ?? null);
 
   useEffect(() => {
     setMeId(getMemberId(shareCode));
@@ -161,6 +164,7 @@ export default function App() {
           onPickDate={setOpenDate}
           onSetRange={handleSetRange}
           onFreeWeekends={handleFreeWeekends}
+          onOpenUsual={() => setOpenUsual(true)}
         />
       )}
       {tab === "best" && <Overlap members={members} availability={availability} />}
@@ -173,6 +177,8 @@ export default function App() {
           rsvps={rsvps}
           reactions={reactions}
           comments={comments}
+          venues={venues}
+          venueVotes={venueVotes}
           onChanged={reloadPlans}
         />
       )}
@@ -209,6 +215,15 @@ export default function App() {
           onSet={handleSet}
           onSetAllDay={handleSetAllDay}
           onClose={() => setOpenDate(null)}
+        />
+      )}
+
+      {openUsual && (
+        <UsualSheet
+          group={group}
+          me={me}
+          onClose={() => setOpenUsual(false)}
+          onChanged={reload}
         />
       )}
     </div>
