@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CalendarDays, Sparkles, Loader2 } from "lucide-react";
 import { useGroup } from "./hooks/useGroup";
-import { setStatus as writeStatus, setDaySlots as writeDaySlots } from "./lib/data";
+import {
+  setStatus as writeStatus,
+  setDaySlots as writeDaySlots,
+  setSlotDates as writeSlotDates,
+} from "./lib/data";
 import { fromKey, toKey } from "./lib/dates";
 import { getMemberId, setMemberId } from "./lib/storage";
-import Landing from "./components/Landing";
 import JoinName from "./components/JoinName";
 import Header from "./components/Header";
 import Calendar from "./components/Calendar";
 import Overlap from "./components/Overlap";
 import DateSheet from "./components/DateSheet";
-import type { Group, Slot, Status } from "./lib/types";
+import type { Slot, Status } from "./lib/types";
 
 type Tab = "calendar" | "best";
 
-function readCode(): string | null {
-  return new URLSearchParams(window.location.search).get("g");
+// One shared group for the friend circle — loaded from the bare link.
+const DEFAULT_CODE = "friends";
+
+function readCode(): string {
+  return new URLSearchParams(window.location.search).get("g") || DEFAULT_CODE;
 }
 
 function expandRange(startKey: string, endKey: string): string[] {
@@ -30,11 +36,22 @@ function expandRange(startKey: string, endKey: string): string[] {
   return dates;
 }
 
+function upcomingWeekendDates(weeks: number): string[] {
+  const dates: string[] = [];
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const dow = d.getDay();
+    if (dow === 5 || dow === 6) dates.push(toKey(d));
+  }
+  return dates;
+}
+
 export default function App() {
-  const [shareCode, setShareCode] = useState<string | null>(readCode());
-  const [meId, setMeId] = useState<string | null>(
-    shareCode ? getMemberId(shareCode) : null
-  );
+  const [shareCode] = useState<string>(readCode());
+  const [meId, setMeId] = useState<string | null>(getMemberId(shareCode));
   const [tab, setTab] = useState<Tab>("calendar");
   const [openDate, setOpenDate] = useState<string | null>(null);
 
@@ -42,7 +59,7 @@ export default function App() {
     useGroup(shareCode);
 
   useEffect(() => {
-    setMeId(shareCode ? getMemberId(shareCode) : null);
+    setMeId(getMemberId(shareCode));
   }, [shareCode]);
 
   const me = useMemo(
@@ -50,14 +67,7 @@ export default function App() {
     [members, meId]
   );
 
-  function onCreated(g: Group) {
-    const url = `${window.location.pathname}?g=${g.share_code}`;
-    window.history.replaceState({}, "", url);
-    setShareCode(g.share_code);
-  }
-
   function onJoined(memberId: string) {
-    if (!shareCode) return;
     setMemberId(shareCode, memberId);
     setMeId(memberId);
     void reload();
@@ -69,7 +79,7 @@ export default function App() {
       await writeStatus(group.id, me.id, openDate, slot, status);
       await reload();
     } catch {
-      // realtime will still reconcile; a failed write just won't persist
+      // realtime reconciles
     }
   }
 
@@ -79,7 +89,7 @@ export default function App() {
       await writeDaySlots(group.id, me.id, [openDate], status);
       await reload();
     } catch {
-      // no-op; realtime reconciles
+      // realtime reconciles
     }
   }
 
@@ -89,11 +99,19 @@ export default function App() {
       await writeDaySlots(group.id, me.id, expandRange(startKey, endKey), status);
       await reload();
     } catch {
-      // no-op; realtime reconciles
+      // realtime reconciles
     }
   }
 
-  if (!shareCode) return <Landing onCreated={onCreated} />;
+  async function handleFreeWeekends() {
+    if (!group || !me) return;
+    try {
+      await writeSlotDates(group.id, me.id, upcomingWeekendDates(8), "evening", "free");
+      await reload();
+    } catch {
+      // realtime reconciles
+    }
+  }
 
   if (loading) {
     return (
@@ -107,21 +125,16 @@ export default function App() {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center px-8 text-center">
         <h2 className="font-display font-extrabold text-2xl text-ink">
-          {notFound ? "This group link isn't working" : "Something went wrong"}
+          Couldn't load this just now
         </h2>
         <p className="text-muted mt-2">
-          {notFound
-            ? "The link may be mistyped. Ask whoever shared it to send it again."
-            : error}
+          {notFound ? "Give it a moment and try again." : error}
         </p>
         <button
-          onClick={() => {
-            window.history.replaceState({}, "", window.location.pathname);
-            setShareCode(null);
-          }}
+          onClick={() => reload()}
           className="mt-5 rounded-2xl bg-mulberry px-6 py-3 font-semibold text-white shadow-glow active:scale-95"
         >
-          Start a new group
+          Try again
         </button>
       </div>
     );
@@ -135,7 +148,7 @@ export default function App() {
 
   return (
     <div className="min-h-dvh pb-24">
-      <Header group={group} me={me} />
+      <Header me={me} />
 
       {tab === "calendar" ? (
         <Calendar
@@ -144,6 +157,7 @@ export default function App() {
           availability={availability}
           onPickDate={setOpenDate}
           onSetRange={handleSetRange}
+          onFreeWeekends={handleFreeWeekends}
         />
       ) : (
         <Overlap members={members} availability={availability} />
