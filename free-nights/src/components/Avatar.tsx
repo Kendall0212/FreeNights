@@ -3,11 +3,12 @@ import { initials } from "../lib/colours";
 interface Props {
   name: string;
   colour: string;
+  emoji?: string | null;
   size?: number;
   dim?: boolean;
 }
 
-export default function Avatar({ name, colour, size = 28, dim = false }: Props) {
+export default function Avatar({ name, colour, emoji, size = 28, dim = false }: Props) {
   return (
     <span
       title={name}
@@ -15,12 +16,12 @@ export default function Avatar({ name, colour, size = 28, dim = false }: Props) 
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.38,
+        fontSize: emoji ? size * 0.55 : size * 0.38,
         backgroundColor: colour,
-        opacity: dim ? 0.35 : 1,
+        opacity: dim ? 0.4 : 1,
       }}
     >
-      {initials(name)}
+      {emoji || initials(name)}
     </span>
   );
 }

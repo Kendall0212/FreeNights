@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarRange, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarRange, X, Sparkles } from "lucide-react";
 import {
   addMonths,
   isPast,
@@ -17,6 +17,7 @@ interface Props {
   availability: Availability[];
   onPickDate: (key: string) => void;
   onSetRange: (startKey: string, endKey: string, status: Status | null) => void;
+  onFreeWeekends: () => void;
 }
 
 const DOW = ["M", "T", "W", "T", "F", "S", "S"];
@@ -34,6 +35,7 @@ export default function Calendar({
   availability,
   onPickDate,
   onSetRange,
+  onFreeWeekends,
 }: Props) {
   const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const [anchor, setAnchor] = useState<Date>(thisMonth);
@@ -129,13 +131,22 @@ export default function Calendar({
       </div>
 
       {!rangeMode ? (
-        <button
-          onClick={() => setRangeMode(true)}
-          className="mb-3 inline-flex items-center gap-2 rounded-full border border-mist bg-white px-3.5 py-2 text-sm font-semibold text-ink shadow-card active:scale-95"
-        >
-          <CalendarRange size={16} />
-          Mark a range
-        </button>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <button
+            onClick={onFreeWeekends}
+            className="inline-flex items-center gap-2 rounded-full bg-mulberry px-3.5 py-2 text-sm font-semibold text-white shadow-glow active:scale-95"
+          >
+            <Sparkles size={16} />
+            Free weekends
+          </button>
+          <button
+            onClick={() => setRangeMode(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-mist bg-white px-3.5 py-2 text-sm font-semibold text-ink shadow-card active:scale-95"
+          >
+            <CalendarRange size={16} />
+            Mark a range
+          </button>
+        </div>
       ) : (
         <div className="mb-3 rounded-2xl bg-white p-3 shadow-card">
           <div className="flex items-center justify-between">
@@ -144,7 +155,7 @@ export default function Calendar({
                 ? "Tap the first day"
                 : !rangeEnd
                 ? "Now tap the last day"
-                : `${prettyDate(lo as string)} \u2192 ${prettyDate(hi as string)} \u00b7 ${countDaysInclusive(lo as string, hi as string)} days`}
+                : `${prettyDate(lo as string)} → ${prettyDate(hi as string)} · ${countDaysInclusive(lo as string, hi as string)} days`}
             </p>
             <button
               onClick={exitRange}

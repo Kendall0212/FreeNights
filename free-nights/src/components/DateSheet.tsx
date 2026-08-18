@@ -118,10 +118,10 @@ export default function DateSheet({
                 {(others.free.length > 0 || others.maybe.length > 0) && (
                   <div className="flex flex-wrap items-center gap-1.5 mt-3">
                     {others.free.map((m) => (
-                      <Avatar key={m.id} name={m.name} colour={m.colour} size={24} />
+                      <Avatar key={m.id} name={m.name} colour={m.colour} emoji={m.emoji} size={24} />
                     ))}
                     {others.maybe.map((m) => (
-                      <Avatar key={m.id} name={m.name} colour={m.colour} size={24} dim />
+                      <Avatar key={m.id} name={m.name} colour={m.colour} emoji={m.emoji} size={24} dim />
                     ))}
                     <span className="font-mono text-[11px] text-muted ml-0.5">
                       {others.free.length} free
