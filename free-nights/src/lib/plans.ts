@@ -160,3 +160,74 @@ export async function deleteComment(commentId: string): Promise<void> {
   const { error } = await supabase.from("comments").delete().eq("id", commentId);
   if (error) throw error;
 }
+
+export interface Venue {
+  id: string;
+  plan_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface VenueVote {
+  id: string;
+  venue_id: string;
+  member_id: string;
+  created_at: string;
+}
+
+export async function fetchVenues(planIds: string[]): Promise<Venue[]> {
+  if (planIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("venues")
+    .select("*")
+    .in("plan_id", planIds)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data as Venue[]) ?? [];
+}
+
+export async function fetchVenueVotes(venueIds: string[]): Promise<VenueVote[]> {
+  if (venueIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("venue_votes")
+    .select("*")
+    .in("venue_id", venueIds);
+  if (error) throw error;
+  return (data as VenueVote[]) ?? [];
+}
+
+export async function addVenue(planId: string, name: string): Promise<void> {
+  const { error } = await supabase
+    .from("venues")
+    .insert({ plan_id: planId, name: name.trim() });
+  if (error) throw error;
+}
+
+export async function deleteVenue(venueId: string): Promise<void> {
+  const { error } = await supabase.from("venues").delete().eq("id", venueId);
+  if (error) throw error;
+}
+
+// One vote per member per plan: clear this member's other votes on the plan,
+// then record the new one (unless toggling the same venue off).
+export async function voteVenue(
+  planVenueIds: string[],
+  venueId: string,
+  memberId: string,
+  on: boolean
+): Promise<void> {
+  if (planVenueIds.length > 0) {
+    const { error: clearErr } = await supabase
+      .from("venue_votes")
+      .delete()
+      .eq("member_id", memberId)
+      .in("venue_id", planVenueIds);
+    if (clearErr) throw clearErr;
+  }
+  if (on) {
+    const { error } = await supabase
+      .from("venue_votes")
+      .insert({ venue_id: venueId, member_id: memberId });
+    if (error) throw error;
+  }
+}

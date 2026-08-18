@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { nextColour, nextEmoji } from "./colours";
-import { makeShareCode } from "./dates";
+import { makeShareCode, toKey } from "./dates";
 import { SLOTS } from "./types";
 import type { Availability, Group, Member, Slot, Status } from "./types";
 
@@ -149,4 +149,72 @@ export async function setSlotDates(
     .from("availability")
     .upsert(rows, { onConflict: "member_id,date,slot" });
   if (error) throw error;
+}
+
+export interface UsualSlot {
+  id: string;
+  group_id: string;
+  member_id: string;
+  weekday: number; // 0 = Sunday … 6 = Saturday (JS getDay)
+  slot: Slot;
+}
+
+export async function fetchUsuals(memberId: string): Promise<UsualSlot[]> {
+  const { data, error } = await supabase
+    .from("usual_slots")
+    .select("*")
+    .eq("member_id", memberId);
+  if (error) throw error;
+  return (data as UsualSlot[]) ?? [];
+}
+
+// Replace a member's usual weekly free times, then apply them to the next
+// 8 weeks (won't touch days they've since changed by hand beyond that window).
+export async function saveUsuals(
+  groupId: string,
+  memberId: string,
+  combos: { weekday: number; slot: Slot }[]
+): Promise<void> {
+  const { error: delErr } = await supabase
+    .from("usual_slots")
+    .delete()
+    .eq("member_id", memberId);
+  if (delErr) throw delErr;
+
+  if (combos.length > 0) {
+    const rows = combos.map((c) => ({
+      group_id: groupId,
+      member_id: memberId,
+      weekday: c.weekday,
+      slot: c.slot,
+    }));
+    const { error: insErr } = await supabase.from("usual_slots").insert(rows);
+    if (insErr) throw insErr;
+  }
+
+  const avail: {
+    group_id: string;
+    member_id: string;
+    date: string;
+    slot: Slot;
+    status: "free";
+  }[] = [];
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  for (let i = 0; i < 56; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const wd = d.getDay();
+    for (const c of combos) {
+      if (c.weekday === wd) {
+        avail.push({ group_id: groupId, member_id: memberId, date: toKey(d), slot: c.slot, status: "free" });
+      }
+    }
+  }
+  if (avail.length > 0) {
+    const { error } = await supabase
+      .from("availability")
+      .upsert(avail, { onConflict: "member_id,date,slot" });
+    if (error) throw error;
+  }
 }
