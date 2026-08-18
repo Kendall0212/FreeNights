@@ -59,7 +59,7 @@ export default function App() {
 
   const { group, members, availability, loading, notFound, error, reload } =
     useGroup(shareCode);
-  const { plans, rsvps, reloadPlans } = usePlans(group?.id ?? null);
+  const { plans, rsvps, reactions, comments, reloadPlans } = usePlans(group?.id ?? null);
 
   useEffect(() => {
     setMeId(getMemberId(shareCode));
@@ -171,6 +171,8 @@ export default function App() {
           members={members}
           plans={plans}
           rsvps={rsvps}
+          reactions={reactions}
+          comments={comments}
           onChanged={reloadPlans}
         />
       )}
