@@ -69,6 +69,33 @@ export function buildIcs(
   return lines.join("\r\n");
 }
 
+// Prefilled Google Calendar "add event" link — one tap on Android/web.
+export function googleCalUrl(
+  title: string,
+  dateKey: string,
+  slot: Slot | null,
+  note: string | null
+): string {
+  const [y, m, d] = dateKey.split("-");
+  let dates: string;
+
+  if (slot) {
+    const [s, e] = SLOT_TIMES[slot];
+    dates = `${y}${m}${d}T${s}/${y}${m}${d}T${e}`;
+  } else {
+    const next = new Date(Number(y), Number(m) - 1, Number(d) + 1);
+    dates = `${y}${m}${d}/${next.getFullYear()}${pad(next.getMonth() + 1)}${pad(next.getDate())}`;
+  }
+
+  const params = new URLSearchParams({ action: "TEMPLATE", text: title, dates });
+  if (note) params.set("details", note);
+  if (slot) {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) params.set("ctz", tz);
+  }
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 export function downloadIcs(filename: string, content: string): void {
   const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
   const url = URL.createObjectURL(blob);
