@@ -9,6 +9,7 @@ import {
   PartyPopper,
   Send,
   Plus,
+  MessageSquare,
 } from "lucide-react";
 import Avatar from "./Avatar";
 import { prettyDate, todayKey, fromKey } from "../lib/dates";
@@ -61,6 +62,11 @@ function countdown(dateKey: string): string {
   if (diff > 1) return `in ${diff} days`;
   if (diff === -1) return "yesterday";
   return `${-diff} days ago`;
+}
+
+// Opens the phone's Messages app with the text pre-filled (iOS + Android).
+function smsHref(body: string): string {
+  return `sms:?&body=${encodeURIComponent(body)}`;
 }
 
 export default function Plans({
@@ -243,6 +249,14 @@ function PlanCard({ plan, me, memberById, rsvps, reactions, comments, venues, ve
     downloadIcs("free-nights.ics", buildIcs(title, plan.date, plan.slot, plan.note));
   }
 
+  function textPlan() {
+    const link = `${window.location.origin}${window.location.pathname}`;
+    const when = `${prettyDate(plan.date)}${plan.slot ? " " + SLOT_LABEL[plan.slot].toLowerCase() : ""}`;
+    const note = plan.note ? ` — ${plan.note}` : "";
+    const lead = plan.confirmed ? "🎉 It's on!" : "night idea 🌙";
+    window.location.href = smsHref(`${lead} ${when}${note} — RSVP 👉 ${link}`);
+  }
+
   async function postComment() {
     const body = draft.trim();
     if (!body) return;
@@ -395,6 +409,13 @@ function PlanCard({ plan, me, memberById, rsvps, reactions, comments, venues, ve
           <Download size={15} /> Apple / .ics
         </button>
       </div>
+
+      <button
+        onClick={textPlan}
+        className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-mulberry py-2.5 text-sm font-semibold text-white mt-2 active:scale-95"
+      >
+        <MessageSquare size={15} /> Text the group
+      </button>
 
       {planComments.length > 0 && (
         <div className="mt-3 space-y-2 border-t border-mist pt-3">
