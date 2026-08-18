@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { CalendarPlus, Download, Trash2, Check, X } from "lucide-react";
+import { CalendarPlus, Download, Trash2, Check, X, CalendarDays } from "lucide-react";
 import Avatar from "./Avatar";
 import { prettyDate, todayKey } from "../lib/dates";
 import { SLOT_LABEL } from "../lib/types";
-import { buildIcs, downloadIcs } from "../lib/ics";
+import { buildIcs, downloadIcs, googleCalUrl } from "../lib/ics";
 import { createPlan, deletePlan, setRsvp } from "../lib/plans";
 import type { Slot, Group, Member } from "../lib/types";
 import type { Plan, Rsvp } from "../lib/plans";
@@ -71,9 +71,14 @@ export default function Plans({ group, me, members, plans, rsvps, onChanged }: P
     }
   }
 
-  function toCalendar(plan: Plan) {
-    const title = plan.note ? `Girls' night — ${plan.note}` : "Girls' night";
-    downloadIcs("free-nights.ics", buildIcs(title, plan.date, plan.slot, plan.note));
+  function planTitle(plan: Plan) {
+    return plan.note ? `Girls' night — ${plan.note}` : "Girls' night";
+  }
+  function toGoogle(plan: Plan) {
+    window.open(googleCalUrl(planTitle(plan), plan.date, plan.slot, plan.note), "_blank", "noopener");
+  }
+  function toApple(plan: Plan) {
+    downloadIcs("free-nights.ics", buildIcs(planTitle(plan), plan.date, plan.slot, plan.note));
   }
 
   return (
@@ -205,12 +210,20 @@ export default function Plans({ group, me, members, plans, rsvps, onChanged }: P
                   </button>
                 </div>
 
-                <button
-                  onClick={() => toCalendar(plan)}
-                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold text-mulberry mt-2 active:scale-95"
-                >
-                  <Download size={15} /> Add to calendar
-                </button>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <button
+                    onClick={() => toGoogle(plan)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-mist py-2.5 text-sm font-semibold text-mulberry active:scale-95"
+                  >
+                    <CalendarDays size={15} /> Google
+                  </button>
+                  <button
+                    onClick={() => toApple(plan)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-mist py-2.5 text-sm font-semibold text-mulberry active:scale-95"
+                  >
+                    <Download size={15} /> Apple / .ics
+                  </button>
+                </div>
               </div>
             );
           })}
