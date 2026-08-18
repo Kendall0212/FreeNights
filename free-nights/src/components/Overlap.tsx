@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Sparkles, Users } from "lucide-react";
+import { Sparkles, Users, CalendarClock, Bell, Check } from "lucide-react";
 import Avatar from "./Avatar";
 import { prettyDate, toKey } from "../lib/dates";
 import { rankTallies, tallies } from "../lib/overlap";
@@ -16,6 +16,8 @@ const HORIZON_DAYS = 56;
 
 export default function Overlap({ members, availability }: Props) {
   const [onlyEveryone, setOnlyEveryone] = useState(false);
+  const [thisWeek, setThisWeek] = useState(false);
+  const [poked, setPoked] = useState(false);
 
   const ranked = useMemo(() => {
     const dates: string[] = [];
@@ -29,39 +31,106 @@ export default function Overlap({ members, availability }: Props) {
     return rankTallies(tallies(dates, members, availability));
   }, [members, availability]);
 
+  // Whoever hasn't entered any availability yet — the usual bottleneck.
+  const notYet = useMemo(() => {
+    const answered = new Set(availability.map((a) => a.member_id));
+    return members.filter((m) => !answered.has(m.id));
+  }, [members, availability]);
+
+  const weekEnd = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 7);
+    return toKey(d);
+  }, []);
+
   const total = Math.max(members.length, 1);
   const canFilter = members.length > 1;
-  const shown = onlyEveryone
-    ? ranked.filter((t) => t.free.length === members.length)
-    : ranked;
+
+  let shown = ranked;
+  if (onlyEveryone) shown = shown.filter((t) => t.free.length === members.length);
+  if (thisWeek) shown = shown.filter((t) => t.date <= weekEnd);
+
+  async function poke() {
+    const names = notYet.map((m) => m.name).join(", ");
+    const link = `${window.location.origin}${window.location.pathname}`;
+    const msg = `we're picking a night 🌙 ${names} — add when you're free 👉 ${link}`;
+    try {
+      await navigator.clipboard.writeText(msg);
+      setPoked(true);
+      setTimeout(() => setPoked(false), 1800);
+    } catch {
+      window.prompt("Copy this to send to the group:", msg);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-5">
       <h2 className="font-display font-extrabold text-2xl text-ink mb-1">Best times</h2>
       <p className="text-muted text-sm mb-4">Most people free, soonest first.</p>
 
+      {notYet.length > 0 && members.length > 1 && (
+        <div className="rounded-2xl bg-white p-4 shadow-card mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-ink text-sm">Waiting on</span>
+            {notYet.map((m) => (
+              <span key={m.id} className="inline-flex items-center gap-1">
+                <Avatar name={m.name} colour={m.colour} emoji={m.emoji} size={20} />
+                <span className="text-sm text-ink">{m.name}</span>
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={poke}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-mulberry px-3.5 py-2 text-sm font-semibold text-white shadow-glow active:scale-95"
+          >
+            {poked ? <Check size={16} /> : <Bell size={16} />}
+            {poked ? "Copied — paste it!" : "Poke them"}
+          </button>
+        </div>
+      )}
+
       {canFilter && (
-        <button
-          onClick={() => setOnlyEveryone((v) => !v)}
-          className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold mb-5 transition active:scale-95 ${
-            onlyEveryone
-              ? "bg-mulberry text-white shadow-glow"
-              : "border border-mist bg-white text-ink shadow-card"
-          }`}
-        >
-          <Users size={16} />
-          Everyone free
-        </button>
+        <div className="flex flex-wrap gap-2 mb-5">
+          <button
+            onClick={() => setOnlyEveryone((v) => !v)}
+            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition active:scale-95 ${
+              onlyEveryone
+                ? "bg-mulberry text-white shadow-glow"
+                : "border border-mist bg-white text-ink shadow-card"
+            }`}
+          >
+            <Users size={16} />
+            Everyone free
+          </button>
+          <button
+            onClick={() => setThisWeek((v) => !v)}
+            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition active:scale-95 ${
+              thisWeek
+                ? "bg-mulberry text-white shadow-glow"
+                : "border border-mist bg-white text-ink shadow-card"
+            }`}
+          >
+            <CalendarClock size={16} />
+            This week
+          </button>
+        </div>
       )}
 
       {shown.length === 0 ? (
         <div className="py-14 text-center">
           <Sparkles className="mx-auto text-muted mb-3" size={28} />
           <h3 className="font-display font-extrabold text-xl text-ink">
-            {onlyEveryone ? "No nights work for everyone yet" : "Nothing lit up yet"}
+            {thisWeek
+              ? "Nothing this week yet"
+              : onlyEveryone
+              ? "No nights work for everyone yet"
+              : "Nothing lit up yet"}
           </h3>
           <p className="text-muted mt-2">
-            {onlyEveryone
+            {thisWeek
+              ? "Try turning off “This week” to see further ahead."
+              : onlyEveryone
               ? "Try turning off the filter to see the closest matches."
               : "Once people mark free times, the best nights show up here."}
           </p>
