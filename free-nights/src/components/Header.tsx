@@ -1,10 +1,15 @@
 import { useState } from "react";
-import { Share2, Check } from "lucide-react";
+import { Share2, Check, MessageSquare } from "lucide-react";
 import Avatar from "./Avatar";
 import type { Member } from "../lib/types";
 
 interface Props {
   me: Member | null;
+}
+
+// Opens the phone's Messages app with the text pre-filled (works on iOS + Android).
+function smsHref(body: string): string {
+  return `sms:?&body=${encodeURIComponent(body)}`;
 }
 
 export default function Header({ me }: Props) {
@@ -33,7 +38,7 @@ export default function Header({ me }: Props) {
 
   return (
     <header className="sticky top-0 z-20 bg-paper/85 backdrop-blur-md border-b border-mist">
-      <div className="mx-auto max-w-md px-4 py-3 flex items-center gap-3">
+      <div className="mx-auto max-w-md px-4 py-3 flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
             Free Nights
@@ -43,6 +48,13 @@ export default function Header({ me }: Props) {
           </h1>
         </div>
         {me && <Avatar name={me.name} colour={me.colour} emoji={me.emoji} size={30} />}
+        <a
+          href={smsHref(nudge)}
+          aria-label="Text the group"
+          className="inline-flex items-center justify-center rounded-full bg-mulberry p-2.5 text-white active:scale-95 transition"
+        >
+          <MessageSquare size={16} />
+        </a>
         <button
           onClick={share}
           className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-2 text-sm font-semibold text-white active:scale-95 transition"
