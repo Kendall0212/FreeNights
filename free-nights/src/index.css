@@ -11,13 +11,13 @@
     @apply text-ink font-sans antialiased;
     margin: 0;
     min-height: 100dvh;
-    /* Twilight ombre: dawn lavender → blush → dusk rose */
+    /* Sunset ombre: apricot → peach → warm rose */
     background: linear-gradient(
       180deg,
-      #E9E5F6 0%,
-      #F1EAF0 34%,
-      #F6E3EB 68%,
-      #EFD1DF 100%
+      #FDEAD8 0%,
+      #FBDFD3 34%,
+      #F6D1D2 68%,
+      #F0C2C6 100%
     ) no-repeat;
     background-attachment: fixed;
   }
