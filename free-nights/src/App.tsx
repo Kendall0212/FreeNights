@@ -8,8 +8,9 @@ import {
   setSlotDates as writeSlotDates,
 } from "./lib/data";
 import { fromKey, toKey } from "./lib/dates";
-import { getMemberId, setMemberId } from "./lib/storage";
+import { getMemberId, setMemberId, rememberGroup } from "./lib/storage";
 import JoinName from "./components/JoinName";
+import Hub from "./components/Hub";
 import Header from "./components/Header";
 import Calendar from "./components/Calendar";
 import Overlap from "./components/Overlap";
@@ -20,11 +21,8 @@ import type { Slot, Status } from "./lib/types";
 
 type Tab = "calendar" | "best" | "plans";
 
-// One shared group for the friend circle — loaded from the bare link.
-const DEFAULT_CODE = "friends";
-
-function readCode(): string {
-  return new URLSearchParams(window.location.search).get("g") || DEFAULT_CODE;
+function readCode(): string | null {
+  return new URLSearchParams(window.location.search).get("g");
 }
 
 function expandRange(startKey: string, endKey: string): string[] {
@@ -53,8 +51,10 @@ function upcomingWeekendDates(weeks: number): string[] {
 }
 
 export default function App() {
-  const [shareCode] = useState<string>(readCode());
-  const [meId, setMeId] = useState<string | null>(getMemberId(shareCode));
+  const [shareCode, setShareCode] = useState<string | null>(readCode());
+  const [meId, setMeId] = useState<string | null>(
+    shareCode ? getMemberId(shareCode) : null
+  );
   const [tab, setTab] = useState<Tab>("calendar");
   const [openDate, setOpenDate] = useState<string | null>(null);
   const [openUsual, setOpenUsual] = useState(false);
@@ -65,8 +65,31 @@ export default function App() {
     usePlans(group?.id ?? null);
 
   useEffect(() => {
-    setMeId(getMemberId(shareCode));
+    setMeId(shareCode ? getMemberId(shareCode) : null);
   }, [shareCode]);
+
+  // Keep state in sync with the browser back/forward buttons.
+  useEffect(() => {
+    const onPop = () => setShareCode(readCode());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Any group you open gets saved to your home screen for quick switching.
+  useEffect(() => {
+    if (group) rememberGroup(group.share_code, group.name);
+  }, [group]);
+
+  function openGroup(code: string) {
+    window.history.pushState({}, "", `${window.location.pathname}?g=${code}`);
+    setTab("calendar");
+    setShareCode(code);
+  }
+
+  function goHome() {
+    window.history.pushState({}, "", window.location.pathname);
+    setShareCode(null);
+  }
 
   const me = useMemo(
     () => members.find((m) => m.id === meId) ?? null,
@@ -119,6 +142,10 @@ export default function App() {
     }
   }
 
+  if (!shareCode) {
+    return <Hub onOpen={openGroup} />;
+  }
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
@@ -131,17 +158,27 @@ export default function App() {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center px-8 text-center">
         <h2 className="font-display font-extrabold text-2xl text-ink">
-          Couldn't load this just now
+          {notFound ? "This group link isn't working" : "Couldn't load this just now"}
         </h2>
         <p className="text-muted mt-2">
-          {notFound ? "Give it a moment and try again." : error}
+          {notFound ? "The link may be mistyped — ask whoever shared it to resend." : error}
         </p>
-        <button
-          onClick={() => reload()}
-          className="mt-5 rounded-2xl bg-mulberry px-6 py-3 font-semibold text-white shadow-glow active:scale-95"
-        >
-          Try again
-        </button>
+        <div className="flex gap-2 mt-5">
+          {!notFound && (
+            <button
+              onClick={() => reload()}
+              className="rounded-2xl border border-mist bg-white px-5 py-3 font-semibold text-ink active:scale-95"
+            >
+              Try again
+            </button>
+          )}
+          <button
+            onClick={goHome}
+            className="rounded-2xl bg-mulberry px-6 py-3 font-semibold text-white shadow-glow active:scale-95"
+          >
+            My groups
+          </button>
+        </div>
       </div>
     );
   }
@@ -154,7 +191,7 @@ export default function App() {
 
   return (
     <div className="min-h-dvh pb-24">
-      <Header me={me} />
+      <Header me={me} groupName={group.name} onHome={goHome} />
 
       {tab === "calendar" && (
         <Calendar
