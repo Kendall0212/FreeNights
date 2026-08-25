@@ -53,7 +53,7 @@ export default function Overlap({ members, availability }: Props) {
 
   async function poke() {
     const names = notYet.map((m) => m.name).join(", ");
-    const link = `${window.location.origin}${window.location.pathname}`;
+    const link = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     const msg = `we're picking a night 🌙 ${names} — add when you're free 👉 ${link}`;
     try {
       await navigator.clipboard.writeText(msg);

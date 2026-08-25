@@ -250,11 +250,15 @@ function PlanCard({ plan, me, memberById, rsvps, reactions, comments, venues, ve
   }
 
   function textPlan() {
-    const link = `${window.location.origin}${window.location.pathname}`;
+    const link = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     const when = `${prettyDate(plan.date)}${plan.slot ? " " + SLOT_LABEL[plan.slot].toLowerCase() : ""}`;
     const note = plan.note ? ` — ${plan.note}` : "";
     const lead = plan.confirmed ? "🎉 It's on!" : "night idea 🌙";
-    window.location.href = smsHref(`${lead} ${when}${note} — RSVP 👉 ${link}`);
+    const title = plan.note ? `Girls' night — ${plan.note}` : "Girls' night";
+    const cal = googleCalUrl(title, plan.date, plan.slot, plan.note);
+    window.location.href = smsHref(
+      `${lead} ${when}${note}\nRSVP 👉 ${link}\nAdd to calendar 👉 ${cal}`
+    );
   }
 
   async function postComment() {

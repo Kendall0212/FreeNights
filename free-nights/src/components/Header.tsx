@@ -5,6 +5,8 @@ import type { Member } from "../lib/types";
 
 interface Props {
   me: Member | null;
+  groupName: string;
+  onHome: () => void;
 }
 
 // Opens the phone's Messages app with the text pre-filled (works on iOS + Android).
@@ -12,10 +14,10 @@ function smsHref(body: string): string {
   return `sms:?&body=${encodeURIComponent(body)}`;
 }
 
-export default function Header({ me }: Props) {
+export default function Header({ me, groupName, onHome }: Props) {
   const [copied, setCopied] = useState(false);
 
-  const link = `${window.location.origin}${window.location.pathname}`;
+  const link = `${window.location.origin}${window.location.pathname}${window.location.search}`;
   const nudge = `girls' night sorting 🌙 tap when you're free and we'll find a night that works 👉 ${link}`;
 
   async function share() {
@@ -39,14 +41,14 @@ export default function Header({ me }: Props) {
   return (
     <header className="sticky top-0 z-20 bg-paper/85 backdrop-blur-md border-b border-mist">
       <div className="mx-auto max-w-md px-4 py-3 flex items-center gap-2">
-        <div className="min-w-0 flex-1">
+        <button onClick={onHome} className="min-w-0 flex-1 text-left active:scale-[0.99] transition">
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted">
             Free Nights
           </p>
           <h1 className="font-display font-extrabold text-xl leading-tight truncate text-ink">
-            When are we free?
+            {groupName}
           </h1>
-        </div>
+        </button>
         {me && <Avatar name={me.name} colour={me.colour} emoji={me.emoji} size={30} />}
         <a
           href={smsHref(nudge)}
