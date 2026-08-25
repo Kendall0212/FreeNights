@@ -97,6 +97,7 @@ export default function App() {
   );
 
   function onJoined(memberId: string) {
+    if (!shareCode) return;
     setMemberId(shareCode, memberId);
     setMeId(memberId);
     void reload();
