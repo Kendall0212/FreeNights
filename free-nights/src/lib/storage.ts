@@ -36,3 +36,46 @@ export function clearMemberId(shareCode: string): void {
   delete map[shareCode];
   write(map);
 }
+
+// Remembers the groups this device has created or joined, so the home
+// screen can list them for quick switching.
+const GROUPS_KEY = "free-nights:groups";
+
+export interface SavedGroup {
+  code: string;
+  name: string;
+}
+
+function readGroups(): SavedGroup[] {
+  try {
+    const raw = localStorage.getItem(GROUPS_KEY);
+    return raw ? (JSON.parse(raw) as SavedGroup[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function listGroups(): SavedGroup[] {
+  return readGroups();
+}
+
+export function rememberGroup(code: string, name: string): void {
+  try {
+    const groups = readGroups().filter((g) => g.code !== code);
+    groups.unshift({ code, name });
+    localStorage.setItem(GROUPS_KEY, JSON.stringify(groups.slice(0, 20)));
+  } catch {
+    // storage unavailable — non-fatal
+  }
+}
+
+export function forgetGroup(code: string): void {
+  try {
+    localStorage.setItem(
+      GROUPS_KEY,
+      JSON.stringify(readGroups().filter((g) => g.code !== code))
+    );
+  } catch {
+    // non-fatal
+  }
+}
